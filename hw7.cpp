@@ -80,42 +80,56 @@ void cany(Bitmap *p, int l, int h){//supression for canny algorithm
 			p->px[y][x] = f[y][x] ? 255 : 0;
 }
 
-//draw line y=kx+b on g in given color using DDA
-void drawLine(Bitmap* g, double k, double b, BYTE C = 255){
-	if(k <= 1 && k >= -1){
-		double r = b + 0.5;
-		for(int x = 0; x < g->width; x++){
-			if(r >= 0 && r < g->height - 1)
-				if(g->px[(int)r][x] < C) g->px[(int)r][x] = C;
-			r += k;
+//draw line (y-H/2)cost-(x-W/2)sint=b on g in given color
+void drawLine(Bitmap* g, double t, double d, BYTE C = 255){
+	if(t == -90){ //vertical
+		int r = g->width / 2 + d;
+		if(r >= 0 && r < g->width)
+			for(int y = 0; y < g->height; y++)
+				if(g->px[y][r] < C) g->px[y][r] = C;
+	}
+	else if(t < -45 || t > 45){
+		t *= M_PI / 180;
+		d /= sin(t); 
+		t = 1 / tan(t);
+		double s = (double)g->width / 2 - t * (double)g->height / 2 - d + 0.5;
+		for(int y = 0; y < g->height; y++){
+			if(s >= 0 && s < g->width)
+				if(g->px[y][(int)s] < C) g->px[y][(int)s] = C;
+			s += t;
 		}
 	}
 	else{
-		b /= -k;
-		k = 1 / k;
-		double r = b + 0.5;
-		for(int y = 0; y < g->height; y++){
-			if(r >= 0 && r < g->width - 1)
-				if(g->px[y][(int)r] < C) g->px[y][(int)r] = C;
-			r += k;
+		t *= M_PI / 180;
+		d /= cos(t); 
+		t = tan(t);
+		double s = (double)g->height / 2 - t * (double)g->width / 2 + d + 0.5;
+		for(int x = 0; x < g->width; x++){
+			if(s >= 0 && s < g->height)
+				if(g->px[(int)s][x] < C) g->px[(int)s][x] = C;
+			s += t;
 		}
 	}
 }
 
 void hough(Bitmap* p){
-	int **h = new int*[180]; //calculate h for each degree
+	//initial
+	double **h = new double*[180];
+	double cs[180], sn[180];
 	int N = p->width + p->height;
 	for(int i = 0; i < 180; i++){
-		h[i] = new int[N];
+		h[i] = new double[N];
+		cs[i] = cos(((double)i - 90) / 180 * M_PI);
+		sn[i] = sin(((double)i - 90) / 180 * M_PI);
 		for(int d = 0; d < N; d++) h[i][d] = 0;
 	}
+	//calculate hough
 	double x, y = -(double)p->height / 2.0;
 	for(int yi = 0; yi < p->height; yi++){
 		x = -(double)p->width / 2.0;
 		for(int xi = 0; xi < p->width; xi++){
 			for(int i = 0; i < 180; i++){
-				double d = y * cos(((double)i - 90) / 180 * M_PI)
-					- x * sin(((double)i - 90) / 180 * M_PI);
+				double d = y * cs[i] - x * sn[i];
 				h[i][(int)((double)N / 2 + d + 0.5)] += p->px[yi][xi];
 			}
 			p->px[yi][xi] = 0;
@@ -123,19 +137,27 @@ void hough(Bitmap* p){
 		}
 		y += 1;
 	}
-	int m = 0;
+	//output hough space
+	double m = 0;
 	for(int i = 0; i < 180; i++)
 		for(int d = 0; d < N; d++)
 			if(h[i][d] > m) m = h[i][d];
-	
-	for(int i = 1; i < 179; i++){
-		for(int d = 1; d < N-1; d++){
-			if(h[i][d] >= h[i-1][d] && h[i][d] >= h[i+1][d] && h[i][d] >= h[i][d-1] && h[i][d] >= h[i][d+1]){
-				double t = ((double)i - 90) / 180 * M_PI;
-				int c = 255 * ((double)h[i][d] / (double)m) * ((double)h[i][d] / (double)m);
-				drawLine(p, tan(t), (double)p->height / 2 - (double)p->width / 2 * tan(t) 
-					+ ((double)d - (double)N / 2) / cos(t), c);
-			}
+	BMP256 f(N, 180);
+	for(int i = 0; i < 180; i++){
+		for(int d = 0; d < N; d++){
+			h[i][d] = 255.0 * h[i][d] / m * h[i][d] / m;
+			f.px[d][i] = (int)h[i][d];
+		}
+	}
+	f.setName(p->name, "bmp");
+	f.addNameSuffix("_hough");
+	f.writeFile();
+	//get lines
+	for(int i = 0; i < 180; i++){
+		for(int d = 0; d < N; d++){
+			//if(h[i][d] >= h[i-1][d] && h[i][d] >= h[i+1][d] && h[i][d] >= h[i][d-1] && h[i][d] >= h[i][d+1]){
+				drawLine(p, i - 90, d - N / 2, h[i][d]);
+			//}
 		}
 	}
 }
@@ -152,18 +174,18 @@ int main(){
 		p[i][0]->addNameSuffix("_lpls");
 		p[i][0]->writeFile();
 		sobe(p[i][1]);
-		p[i][1]->addNameSuffix("_sobe");
+		p[i][1]->addNameSuffix("_sob");
 		p[i][1]->writeFile();
 		p[i][2] = new BMP256(p[i][1]);
 		cany(p[i][2], 50, 140); //high and low gate
-		p[i][2]->addNameSuffix("_cany");
+		p[i][2]->addNameSuffix("cny");
 		p[i][2]->writeFile();
 	}
 	//process hough transformation
 	for(int i = 0; i < 6; i++){
 		for(int j = 0; j < 3; j++){
 			hough(p[i][j]);
-			p[i][j]->addNameSuffix("_hough");
+			p[i][j]->addNameSuffix("_line");
 			p[i][j]->writeFile();
 		}
 	}

@@ -2,12 +2,11 @@
 #define DIM 0.5
 int main() {
 	char f[] = "test-.bmp";
-	char g[3][26] = {"test-_lpls_hough.bmp", "test-_sobe_hough.bmp", "test-_sobe_cany_hough.bmp"};
-	char h[] = "show--.bmp";
+	char g[3][22] = {"test-_lpls_line.bmp", "test-_sob_line.bmp", "test-_sobcny_line.bmp"};
 	BMP256 *a, *b;
 	BMP24 *c;
 	for(int n = 0; n < 6; n++) {
-		f[4] = h[4] = '1' + n;
+		f[4] = '1' + n;
 		a = new BMP256(f);
 		for(int m = 0; m < 3; m++) {
 			g[m][4] = '1' + n;
@@ -22,7 +21,9 @@ int main() {
 					c->px[i][j].B = t;
 				}
 			}
-			c->writeFile(h);
+			c->setName(g[m], "bmp");
+			c->addNameSuffix("_show");
+			c->writeFile();
 		}
 	}
 }
